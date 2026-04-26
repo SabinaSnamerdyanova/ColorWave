@@ -2,7 +2,6 @@ package com.example.colorwave
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -10,19 +9,24 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.colorwave.screens.HomeScreenContent
-import com.example.colorwave.screens.SettingsScreenContent
+import com.example.colorwave.screens.LoginScreen
+import com.example.colorwave.screens.MainScreen
 
 @Composable
-fun AppNavHost(navController: NavHostController, innerPadding: androidx.compose.foundation.layout.PaddingValues) {
+fun AppNavHost(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = "home",
-        modifier = androidx.compose.ui.Modifier.padding(innerPadding)
+        startDestination = "login"
     ) {
-        composable("home") { HomeScreenContent(navController) }
-        composable("settings") { SettingsScreenContent() }
-        composable("analyzer") { AnalyzerScreen(navController) }
+        composable("login") {
+            LoginScreen(navController)
+        }
+        composable("main_app") {
+            MainScreen()
+        }
+        composable("analyzer") {
+            AnalyzerScreen(navController)
+        }
     }
 }
 
