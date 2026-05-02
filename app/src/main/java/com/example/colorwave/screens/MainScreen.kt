@@ -25,6 +25,7 @@ fun MainScreen(rootNavController: NavHostController) {
 
     Scaffold(
         bottomBar = {
+            // Скрываем панель навигации на экранах анализа и результатов
             if (currentRoute == "home" || currentRoute == "settings") {
                 Surface(
                     modifier = Modifier.shadow(8.dp),
@@ -67,6 +68,7 @@ fun MainScreen(rootNavController: NavHostController) {
             composable("home") { HomeScreenContent(navController) }
             composable("settings") { SettingsScreenContent(rootNavController) }
             composable("analyzer") { AnalyzerScreen(navController) }
+            composable("music_result") { MusicResultScreen(navController) }
         }
     }
 }

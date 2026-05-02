@@ -1,13 +1,15 @@
 package com.example.colorwave.screens
 
 import android.Manifest
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.*
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -20,20 +22,43 @@ fun HomeScreenContent(navController: NavHostController) {
     ) { isGranted ->
         if (isGranted) {
             navController.navigate("analyzer")
-        } else {
+        }
+    }
+
+    val pickAudioLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            navController.navigate("music_result")
         }
     }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("ColorWave", style = MaterialTheme.typography.displayMedium)
-            Spacer(modifier = Modifier.height(20.dp))
+            
+            Spacer(modifier = Modifier.height(40.dp))
 
-            FloatingActionButton(
+            Button(
                 onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                containerColor = MaterialTheme.colorScheme.primary
+                modifier = Modifier.fillMaxWidth(0.7f).height(56.dp),
+                shape = MaterialTheme.shapes.large
             ) {
-                Icon(Icons.Default.Mic, contentDescription = "Запись")
+                Icon(Icons.Default.Mic, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Живая запись")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedButton(
+                onClick = { pickAudioLauncher.launch("audio/*") },
+                modifier = Modifier.fillMaxWidth(0.7f).height(56.dp),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Icon(Icons.Default.MusicNote, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Загрузить песню")
             }
         }
     }

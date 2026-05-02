@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import com.example.colorwave.screens.HomeScreenContent
 import com.example.colorwave.screens.SettingsScreenContent
 import com.example.colorwave.screens.AnalyzerScreen
+import com.example.colorwave.screens.MusicResultScreen
 
 @Composable
 fun AppNavHost(
@@ -25,5 +26,6 @@ fun AppNavHost(
             SettingsScreenContent(rootNavController = rootNavController)
         }
         composable("analyzer") { AnalyzerScreen(navController) }
+        composable("music_result") { MusicResultScreen(navController) }
     }
 }
