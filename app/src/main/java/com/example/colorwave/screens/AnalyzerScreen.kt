@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -32,7 +34,7 @@ import kotlin.math.*
 @Composable
 fun AnalyzerScreen(navController: NavHostController) {
     val context = LocalContext.current
-    
+
     var bassVal by remember { mutableStateOf(0f) }
     var midVal by remember { mutableStateOf(0f) }
     var highVal by remember { mutableStateOf(0f) }
@@ -54,20 +56,20 @@ fun AnalyzerScreen(navController: NavHostController) {
 
     val color1 by animateColorAsState(
         targetValue = Color(
-            red = (bassVal * 1.2f).coerceIn(0f, 1f),
-            green = (midVal * 0.5f).coerceIn(0f, 1f),
-            blue = (highVal * 0.2f).coerceIn(0f, 1f)
-        ).copy(alpha = 1f),
-        animationSpec = tween(100)
+            red = (bassVal * 1.5f).coerceIn(0f, 1f),
+            green = (midVal * 0.4f).coerceIn(0f, 1f),
+            blue = (highVal * 1.3f).coerceIn(0f, 1f)
+        ),
+        animationSpec = tween(600)
     )
 
     val color2 by animateColorAsState(
         targetValue = Color(
-            red = (highVal * 0.3f).coerceIn(0f, 1f),
-            green = (midVal * 1.0f).coerceIn(0f, 1f),
-            blue = (bassVal * 0.8f).coerceIn(0f, 1f)
-        ).copy(alpha = 1f),
-        animationSpec = tween(150)
+            red = (highVal * 0.2f).coerceIn(0f, 1f),
+            green = (midVal * 1.2f).coerceIn(0f, 1f),
+            blue = (bassVal * 1.8f).coerceIn(0f, 1f)
+        ),
+        animationSpec = tween(800)
     )
 
     if (hasPermission) {
@@ -86,12 +88,12 @@ fun AnalyzerScreen(navController: NavHostController) {
             )
 
             if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                statusText = "Ошибка инициализации"
+                statusText = "Ошибка микрофона"
                 return@LaunchedEffect
             }
 
             statusText = "Анализирую частоты..."
-            
+
             withContext(Dispatchers.IO) {
                 val buffer = ShortArray(fftSize)
                 audioRecord.startRecording()
@@ -101,20 +103,24 @@ fun AnalyzerScreen(navController: NavHostController) {
                         val readSize = audioRecord.read(buffer, 0, fftSize)
                         if (readSize > 0) {
                             var b = 0f; var m = 0f; var h = 0f
-                            
-                            for (i in 0 until readSize / 2) {
+
+                            for (i in 0 until readSize - 1) {
                                 val diff = abs(buffer[i+1].toInt() - buffer[i].toInt()).toFloat() / 32768f
                                 val amp = abs(buffer[i].toInt()).toFloat() / 32768f
 
-                                if (diff < 0.05f) b += amp * 2.0f
-                                else if (diff < 0.2f) m += amp * 1.5f
-                                else h += amp * 3.0f
+                                if (diff < 0.04f) b += amp * 2.5f
+                                else if (diff < 0.15f) m += amp * 2.0f
+                                else h += amp * 7.0f
                             }
 
-                            val norm = readSize / 2f
-                            bassVal = (b / norm * 10f).coerceIn(0f, 1f)
-                            midVal = (m / norm * 15f).coerceIn(0f, 1f)
-                            highVal = (h / norm * 25f).coerceIn(0f, 1f)
+                            val norm = readSize.toFloat()
+                            val targetB = (b / norm * 15f).coerceIn(0f, 1f)
+                            val targetM = (m / norm * 20f).coerceIn(0f, 1f)
+                            val targetH = (h / norm * 50f).coerceIn(0f, 1f)
+
+                            bassVal = bassVal * 0.8f + targetB * 0.2f
+                            midVal = midVal * 0.8f + targetM * 0.2f
+                            highVal = highVal * 0.8f + targetH * 0.2f
                         }
                         delay(20)
                     }
@@ -144,7 +150,7 @@ fun AnalyzerScreen(navController: NavHostController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(statusText, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelLarge)
-            
+
             Spacer(modifier = Modifier.height(60.dp))
 
             Row(
@@ -152,11 +158,11 @@ fun AnalyzerScreen(navController: NavHostController) {
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.Bottom
             ) {
-                SpectrumBar(bassVal, Color(0xFFFF4444), "BASS")
+                SpectrumBar(bassVal, Color(0xFFFF5252), "BASS")
                 Spacer(Modifier.width(12.dp))
-                SpectrumBar(midVal, Color(0xFF44FF44), "MID")
+                SpectrumBar(midVal, Color(0xFF69F0AE), "MID")
                 Spacer(Modifier.width(12.dp))
-                SpectrumBar(highVal, Color(0xFF4444FF), "HIGH")
+                SpectrumBar(highVal, Color(0xFF40C4FF), "HIGH")
             }
 
             Spacer(modifier = Modifier.height(60.dp))
