@@ -1,131 +1,207 @@
 package com.example.colorwave.screens
 
+import android.content.*
+import android.graphics.*
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import kotlinx.coroutines.delay
+import com.example.colorwave.audio.ColorMapper
+import com.example.colorwave.audio.FileAnalyzer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MusicResultScreen(navController: NavHostController) {
+fun MusicResultScreen(navController: NavHostController, fileUri: String) {
+    val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
+    var palette by remember { mutableStateOf<List<Color>>(listOf(Color.DarkGray, Color.Gray)) }
 
-    val colors = listOf(
-        Color(0xFF6200EE),
-        Color(0xFF03DAC5),
-        Color(0xFFFF0266)
-    )
+    val decoded = Uri.decode(fileUri)
 
-    LaunchedEffect(Unit) {
-        delay(2000)
-        isLoading = false
+    LaunchedEffect(decoded) {
+        isLoading = true
+        withContext(Dispatchers.Default) {
+            palette = if (decoded.startsWith("live_")) {
+                val colorsData = decoded.removePrefix("live_").split("_")
+                colorsData.mapNotNull {
+                    try { Color(it.toInt()) } catch (_: Exception) { null }
+                }.ifEmpty { listOf(Color.DarkGray, Color.Gray) }
+            } else {
+                try {
+                    val features = FileAnalyzer.analyze(context, Uri.parse(decoded))
+                    ColorMapper.fromFeatures(features)
+                } catch (_: Exception) {
+                    listOf(Color.DarkGray, Color.Gray)
+                }
+            }
+            isLoading = false
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Результат анализа") },
+                title = { Text("Палитра звука") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                actions = {
+                    if (!isLoading) {
+                        IconButton(onClick = { sharePalette(context, palette) }) {
+                            Icon(Icons.Default.Share, contentDescription = "Поделиться")
+                        }
                     }
                 }
             )
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isLoading) {
+        if (isLoading) {
+            Box(Modifier.fillMaxSize(), Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(strokeWidth = 4.dp)
                     Spacer(Modifier.height(16.dp))
-                    Text("Обработка музыки...", style = MaterialTheme.typography.bodyLarge)
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Карточка с градиентом
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        elevation = CardDefaults.cardElevation(8.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Brush.verticalGradient(colors))
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        "Цветовая палитра песни",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    colors.forEach { color ->
-                        val hex = String.format("#%06X", (0xFFFFFF and color.value.toLong().toInt()))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(color, RoundedCornerShape(8.dp))
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                text = hex,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                fontSize = 18.sp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Button(
-                        onClick = {},
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Сохранить результат")
-                    }
+                    Text("Вслушиваемся в характер звука…", style = MaterialTheme.typography.bodyLarge)
                 }
             }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(16.dp))
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().height(480.dp),
+                    shape = RoundedCornerShape(32.dp),
+                    elevation = CardDefaults.cardElevation(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = palette,
+                                    start = Offset.Zero,
+                                    end = Offset(1440f, 3000f)
+                                )
+                            )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                palette.forEach { color ->
+                    val hex = String.format("#%06X", 0xFFFFFF and color.toArgb())
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(color))
+                            Spacer(Modifier.width(16.dp))
+                            Text(hex, Modifier.weight(1f), fontWeight = FontWeight.Bold, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            IconButton(onClick = {
+                                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("HEX", hex))
+                                Toast.makeText(context, "HEX скопирован", Toast.LENGTH_SHORT).show()
+                            }) { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(18.dp)) }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = { saveToGallery(context, palette) },
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Icon(Icons.Default.Download, null)
+                    Spacer(Modifier.width(12.dp))
+                    Text("Скачать PNG")
+                }
+                Spacer(Modifier.height(40.dp))
+            }
         }
+    }
+}
+
+private fun sharePalette(context: Context, palette: List<Color>) {
+    val hexString = palette.joinToString("\n") { String.format("#%06X", 0xFFFFFF and it.toArgb()) }
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, "Моя палитра ColorWave:\n$hexString")
+    }
+    context.startActivity(Intent.createChooser(intent, "Поделиться палитрой"))
+}
+
+private fun saveToGallery(context: Context, palette: List<Color>) {
+    val width = 1440
+    val height = 2560
+    val b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(b)
+    val colors = palette.map { it.toArgb() }.toIntArray()
+
+    val paint = Paint().apply {
+        isAntiAlias = true
+        isDither = true
+        shader = LinearGradient(0f, 0f, width.toFloat(), height.toFloat(), colors, null, Shader.TileMode.CLAMP)
+    }
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+
+    val filename = "ColorWave_${System.currentTimeMillis()}.png"
+    val values = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+        }
+    }
+
+    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+    try {
+        uri?.let { targetUri ->
+            context.contentResolver.openOutputStream(targetUri)?.use { out ->
+                b.compress(Bitmap.CompressFormat.PNG, 100, out)
+                Toast.makeText(context, "Изображение сохранено!", Toast.LENGTH_SHORT).show()
+            }
+        } ?: throw Exception("MediaStore Error")
+    } catch (_: Exception) {
+        Toast.makeText(context, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
     }
 }

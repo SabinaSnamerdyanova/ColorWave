@@ -29,7 +29,8 @@ fun HomeScreenContent(navController: NavHostController) {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            navController.navigate("music_result")
+            val encodedUri = Uri.encode(it.toString())
+            navController.navigate("music_result/$encodedUri")
         }
     }
 

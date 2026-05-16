@@ -11,10 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.colorwave.AppNavHost
 
 @Composable
 fun MainScreen(rootNavController: NavHostController) {
@@ -25,7 +24,6 @@ fun MainScreen(rootNavController: NavHostController) {
 
     Scaffold(
         bottomBar = {
-            // Скрываем панель навигации на экранах анализа и результатов
             if (currentRoute == "home" || currentRoute == "settings") {
                 Surface(
                     modifier = Modifier.shadow(8.dp),
@@ -60,15 +58,11 @@ fun MainScreen(rootNavController: NavHostController) {
             }
         }
     ) { innerPadding ->
-        NavHost(
+
+        AppNavHost(
             navController = navController,
-            startDestination = "home",
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable("home") { HomeScreenContent(navController) }
-            composable("settings") { SettingsScreenContent(rootNavController) }
-            composable("analyzer") { AnalyzerScreen(navController) }
-            composable("music_result") { MusicResultScreen(navController) }
-        }
+            rootNavController = rootNavController,
+            innerPadding = innerPadding
+        )
     }
 }

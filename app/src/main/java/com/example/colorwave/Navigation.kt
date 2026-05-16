@@ -3,12 +3,11 @@ package com.example.colorwave
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.colorwave.screens.HomeScreenContent
-import com.example.colorwave.screens.SettingsScreenContent
-import com.example.colorwave.screens.AnalyzerScreen
-import com.example.colorwave.screens.MusicResultScreen
+import androidx.navigation.navArgument
+import com.example.colorwave.screens.*
 
 @Composable
 fun AppNavHost(
@@ -26,6 +25,13 @@ fun AppNavHost(
             SettingsScreenContent(rootNavController = rootNavController)
         }
         composable("analyzer") { AnalyzerScreen(navController) }
-        composable("music_result") { MusicResultScreen(navController) }
+
+        composable(
+            route = "music_result/{fileUri}",
+            arguments = listOf(navArgument("fileUri") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val fileUri = backStackEntry.arguments?.getString("fileUri") ?: ""
+            MusicResultScreen(navController, fileUri)
+        }
     }
 }

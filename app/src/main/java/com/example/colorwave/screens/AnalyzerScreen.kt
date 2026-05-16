@@ -5,22 +5,25 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -29,16 +32,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import kotlin.math.*
+import kotlin.math.abs
+import kotlin.math.pow
 
 @Composable
 fun AnalyzerScreen(navController: NavHostController) {
     val context = LocalContext.current
-
-    var bassVal by remember { mutableStateOf(0f) }
-    var midVal by remember { mutableStateOf(0f) }
-    var highVal by remember { mutableStateOf(0f) }
-    var statusText by remember { mutableStateOf("Ожидание звука...") }
+    
+    var bassIntensity by remember { mutableStateOf(0f) }
+    var midIntensity by remember { mutableStateOf(0f) }
+    var highIntensity by remember { mutableStateOf(0f) }
+    var globalVolume by remember { mutableStateOf(0f) }
+    
+    val sessionColors = remember { mutableStateListOf<Int>() }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -48,154 +54,128 @@ fun AnalyzerScreen(navController: NavHostController) {
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted -> hasPermission = isGranted }
+    ) { hasPermission = it }
 
     LaunchedEffect(Unit) {
         if (!hasPermission) launcher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    val color1 by animateColorAsState(
-        targetValue = Color(
-            red = (bassVal * 1.5f).coerceIn(0f, 1f),
-            green = (midVal * 0.4f).coerceIn(0f, 1f),
-            blue = (highVal * 1.3f).coerceIn(0f, 1f)
+    // НЕЛИНЕЙНАЯ МОДЕЛЬ ЦВЕТА: Доминирующая частота выигрывает за счет 3-й степени
+    val dynamicHue by remember(bassIntensity, midIntensity, highIntensity) {
+        derivedStateOf {
+            val b = bassIntensity.pow(3f)
+            val m = midIntensity.pow(3f)
+            val h = highIntensity.pow(3f)
+            val total = b + m + h
+            
+            if (total < 0.0001f) 200f 
+            else {
+                // Бас (0° - Красный), Мид (120° - Зеленый), Высокие (240° - Синий)
+                ((b * 0f + m * 120f + h * 240f) / total) % 360f
+            }
+        }
+    }
+
+    val colorTop by animateColorAsState(
+        targetValue = if (globalVolume < 0.02f) Color.Black else Color.hsv(
+            hue = dynamicHue,
+            saturation = 0.9f,
+            value = (0.2f + globalVolume * 2.5f).coerceIn(0.1f, 1f)
         ),
-        animationSpec = tween(600)
+        animationSpec = tween(120, easing = LinearEasing)
     )
 
-    val color2 by animateColorAsState(
-        targetValue = Color(
-            red = (highVal * 0.2f).coerceIn(0f, 1f),
-            green = (midVal * 1.2f).coerceIn(0f, 1f),
-            blue = (bassVal * 1.8f).coerceIn(0f, 1f)
+    val colorBottom by animateColorAsState(
+        targetValue = if (globalVolume < 0.02f) Color(0xFF101015) else Color.hsv(
+            hue = (dynamicHue + 60f) % 360f,
+            saturation = 1f,
+            value = (0.1f + globalVolume * 1.5f).coerceIn(0.05f, 0.7f)
         ),
-        animationSpec = tween(800)
+        animationSpec = tween(250, easing = LinearEasing)
     )
 
     if (hasPermission) {
         LaunchedEffect(Unit) {
             val sampleRate = 44100
             val fftSize = 1024
-            val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-                .coerceAtLeast(fftSize)
+            val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(fftSize)
+            val audioRecord = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
 
-            val audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
+            if (audioRecord.state == AudioRecord.STATE_INITIALIZED) {
+                withContext(Dispatchers.IO) {
+                    val buffer = ShortArray(fftSize)
+                    audioRecord.startRecording()
+                    val smoothing = 0.3f 
 
-            if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                statusText = "Ошибка микрофона"
-                return@LaunchedEffect
-            }
+                    try {
+                        while (isActive) {
+                            if (audioRecord.read(buffer, 0, fftSize) > 0) {
+                                var b = 0f; var m = 0f; var h = 0f
+                                var totalAmplitude = 0f
+                                for (i in 0 until fftSize - 1) {
+                                    val s1 = buffer[i].toInt().toFloat() / 32768f
+                                    val s2 = buffer[i+1].toInt().toFloat() / 32768f
+                                    val amp = abs(s1)
+                                    totalAmplitude += amp
+                                    val delta = abs(s1 - s2)
 
-            statusText = "Анализирую частоты..."
-
-            withContext(Dispatchers.IO) {
-                val buffer = ShortArray(fftSize)
-                audioRecord.startRecording()
-
-                try {
-                    while (isActive) {
-                        val readSize = audioRecord.read(buffer, 0, fftSize)
-                        if (readSize > 0) {
-                            var b = 0f; var m = 0f; var h = 0f
-
-                            for (i in 0 until readSize - 1) {
-                                val diff = abs(buffer[i+1].toInt() - buffer[i].toInt()).toFloat() / 32768f
-                                val amp = abs(buffer[i].toInt()).toFloat() / 32768f
-
-                                if (diff < 0.04f) b += amp * 2.5f
-                                else if (diff < 0.15f) m += amp * 2.0f
-                                else h += amp * 7.0f
+                                    // Разделение с гипер-усилением для синего
+                                    when {
+                                        delta < 0.015f -> b += amp * 8f   // Бас
+                                        delta < 0.10f -> m += amp * 25f  // Средние (Зеленый)
+                                        else -> h += amp * 180f         // Высокие (Синий)
+                                    }
+                                }
+                                val n = fftSize.toFloat()
+                                globalVolume = globalVolume * 0.7f + (totalAmplitude / n * 15f).coerceIn(0f, 1f) * 0.3f
+                                bassIntensity = bassIntensity * (1 - smoothing) + (b / n).coerceIn(0f, 1f) * smoothing
+                                midIntensity = midIntensity * (1 - smoothing) + (m / n).coerceIn(0f, 1f) * smoothing
+                                highIntensity = highIntensity * (1 - smoothing) + (h / n).coerceIn(0f, 1f) * smoothing
+                                
+                                if (System.currentTimeMillis() % 400 < 20 && globalVolume > 0.05f) {
+                                    sessionColors.add(colorTop.toArgb())
+                                }
                             }
-
-                            val norm = readSize.toFloat()
-                            val targetB = (b / norm * 15f).coerceIn(0f, 1f)
-                            val targetM = (m / norm * 20f).coerceIn(0f, 1f)
-                            val targetH = (h / norm * 50f).coerceIn(0f, 1f)
-
-                            bassVal = bassVal * 0.8f + targetB * 0.2f
-                            midVal = midVal * 0.8f + targetM * 0.2f
-                            highVal = highVal * 0.8f + targetH * 0.2f
+                            delay(16)
                         }
-                        delay(20)
-                    }
-                } finally {
-                    audioRecord.stop()
-                    audioRecord.release()
+                    } finally { audioRecord.stop(); audioRecord.release() }
                 }
             }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(color1, color2, Color.Black)))
-    ) {
-        IconButton(
-            onClick = { navController.popBackStack() },
-            modifier = Modifier.padding(top = 48.dp, start = 16.dp)
-        ) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Назад", tint = Color.White)
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(colorTop, colorBottom, Color.Black)))) {
+        IconButton(onClick = { navController.popBackStack() }, modifier = Modifier.padding(top = 48.dp, start = 16.dp)) {
+            Icon(Icons.Default.ArrowBack, "Назад", tint = Color.White)
         }
-
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(statusText, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelLarge)
-
-            Spacer(modifier = Modifier.height(60.dp))
-
-            Row(
-                modifier = Modifier.height(200.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                SpectrumBar(bassVal, Color(0xFFFF5252), "BASS")
-                Spacer(Modifier.width(12.dp))
-                SpectrumBar(midVal, Color(0xFF69F0AE), "MID")
-                Spacer(Modifier.width(12.dp))
-                SpectrumBar(highVal, Color(0xFF40C4FF), "HIGH")
+        Column(Modifier.fillMaxSize(), Arrangement.Center, Alignment.CenterHorizontally) {
+            Row(Modifier.height(200.dp).fillMaxWidth(), Arrangement.Center, Alignment.Bottom) {
+                SpectrumBar(bassIntensity, Color(0xFFFF4444), "BASS")
+                Spacer(Modifier.width(18.dp)); SpectrumBar(midIntensity, Color(0xFF44FF44), "MID")
+                Spacer(Modifier.width(18.dp)); SpectrumBar(highIntensity, Color(0xFF4444FF), "HIGH")
             }
-
-            Spacer(modifier = Modifier.height(60.dp))
-
-            val hex = String.format("#%06X", (0xFFFFFF and color1.value.toLong().toInt()))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
-                shape = MaterialTheme.shapes.extraLarge
+            Spacer(Modifier.height(100.dp))
+            Button(
+                onClick = {
+                    val result = sessionColors.distinct().shuffled().take(5).ifEmpty { listOf(colorTop.toArgb(), colorBottom.toArgb()) }
+                    val encoded = Uri.encode("live_${result.joinToString("_")}")
+                    navController.navigate("music_result/$encoded")
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(0.15f)),
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier.height(64.dp).padding(horizontal = 32.dp)
             ) {
-                Text(
-                    text = hex,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                    color = Color.White,
-                    style = MaterialTheme.typography.displaySmall
-                )
+                Icon(Icons.Default.StopCircle, null, tint = Color.White)
+                Spacer(Modifier.width(12.dp)); Text("Завершить", color = Color.White)
             }
         }
     }
 }
 
 @Composable
-fun SpectrumBar(valNormalized: Float, color: Color, label: String) {
+fun SpectrumBar(intensity: Float, color: Color, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier
-                .width(45.dp)
-                .height((valNormalized * 200).dp.coerceAtLeast(10.dp))
-                .background(
-                    Brush.verticalGradient(listOf(color, color.copy(alpha = 0.3f))),
-                    MaterialTheme.shapes.small
-                )
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(label, color = Color.White, style = MaterialTheme.typography.bodySmall)
+        Box(Modifier.width(55.dp).height((intensity * 200).dp.coerceAtLeast(8.dp)).background(color.copy(alpha = 0.8f), MaterialTheme.shapes.medium))
+        Text(label, color = Color.White.copy(0.5f), style = MaterialTheme.typography.labelSmall)
     }
 }
