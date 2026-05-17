@@ -1,90 +1,133 @@
 package com.example.colorwave.audio
 
 import android.content.Context
-import android.media.MediaCodec
-import android.media.MediaExtractor
-import android.media.MediaFormat
+import android.media.*
 import android.net.Uri
 import java.nio.ByteOrder
 import kotlin.math.abs
+import kotlin.math.ln
 import kotlin.math.sqrt
 
 object FileAnalyzer {
+
     fun analyze(context: Context, uri: Uri): AudioFeatures {
         val extractor = MediaExtractor()
-        return try {
+
+        try {
             extractor.setDataSource(context, uri, null)
-            val trackIndex = (0 until extractor.trackCount).firstOrNull {
-                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: return defaultFeatures()
+
+            val trackIndex = (0 until extractor.trackCount)
+                .firstOrNull {
+                    extractor.getTrackFormat(it)
+                        .getString(MediaFormat.KEY_MIME)
+                        ?.startsWith("audio/") == true
+                } ?: return fallback(uri)
 
             extractor.selectTrack(trackIndex)
             val format = extractor.getTrackFormat(trackIndex)
-            val duration = format.getLong(MediaFormat.KEY_DURATION)
-            val codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
+
+            val codec = MediaCodec.createDecoderByType(
+                format.getString(MediaFormat.KEY_MIME)!!
+            )
             codec.configure(format, null, null, 0)
             codec.start()
 
-            var rmsSum = 0f
-            var zcrSum = 0f
-            var deltaSum = 0f
-            var peakAmp = 0.01f
-            var count = 0L
-            val bufferInfo = MediaCodec.BufferInfo()
+            var low = 0f
+            var mid = 0f
+            var high = 0f
+            var rms = 0f
+            var samples = 0
+            var seed = 0L
 
-            val points = (1..25).map { it / 26.0 }
-            for (p in points) {
-                extractor.seekTo((duration * p).toLong(), MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-                var frames = 0
-                while (frames < 10) {
-                    val inIdx = codec.dequeueInputBuffer(5000)
-                    if (inIdx >= 0) {
-                        val buf = codec.getInputBuffer(inIdx)!!
-                        val size = extractor.readSampleData(buf, 0)
-                        if (size < 0) break
-                        codec.queueInputBuffer(inIdx, 0, size, extractor.sampleTime, 0)
-                        extractor.advance()
-                    }
-                    val outIdx = codec.dequeueOutputBuffer(bufferInfo, 5000)
-                    if (outIdx >= 0) {
-                        val outBuf = codec.getOutputBuffer(outIdx)!!
-                        outBuf.order(ByteOrder.LITTLE_ENDIAN)
-                        var prevV = 0f
-                        while (outBuf.remaining() >= 2) {
-                            val v = outBuf.short / 32768f
-                            val av = abs(v)
-                            if (av > peakAmp) peakAmp = av
-                            rmsSum += v * v
-                            val delta = abs(v - prevV)
-                            deltaSum += delta
-                            if ((v > 0 && prevV < 0) || (v < 0 && prevV > 0)) zcrSum++
-                            prevV = v
-                            count++
+            val bufferInfo = MediaCodec.BufferInfo()
+            var extractorDone = false
+            var decodeDone = false
+
+            while (!decodeDone && samples < 300_000) {
+
+                if (!extractorDone) {
+                    val inIndex = codec.dequeueInputBuffer(10_000)
+                    if (inIndex >= 0) {
+                        val input = codec.getInputBuffer(inIndex)!!
+                        val size = extractor.readSampleData(input, 0)
+
+                        if (size < 0) {
+                            codec.queueInputBuffer(
+                                inIndex, 0, 0, 0,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            )
+                            extractorDone = true
+                        } else {
+                            codec.queueInputBuffer(
+                                inIndex, 0, size,
+                                extractor.sampleTime, 0
+                            )
+                            extractor.advance()
                         }
-                        frames++
-                        codec.releaseOutputBuffer(outIdx, false)
                     }
                 }
-                codec.flush()
+
+                val outIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000)
+                if (outIndex >= 0) {
+                    val output = codec.getOutputBuffer(outIndex)!!
+                    output.order(ByteOrder.LITTLE_ENDIAN)
+
+                    while (output.remaining() >= 2) {
+                        val v = output.short / 32768f
+                        val a = abs(v)
+
+                        rms += v * v
+
+                        when {
+                            samples % 3 == 0 -> low += a
+                            samples % 3 == 1 -> mid += a
+                            else -> high += a
+                        }
+
+                        if (samples % 500 == 0) {
+                            seed += (a * 10_000).toLong()
+                        }
+
+                        samples++
+                    }
+
+                    codec.releaseOutputBuffer(outIndex, false)
+
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                        decodeDone = true
+                    }
+                }
             }
+
             codec.stop()
             codec.release()
             extractor.release()
 
-            if (count == 0L) count = 1
-            val gain = 1.0f / peakAmp.coerceAtLeast(0.05f)
+            if (samples == 0) return fallback(uri)
 
-            AudioFeatures(
-                energy = (sqrt(rmsSum / count) * gain * 1.5f).coerceIn(0f, 1f),
-                brightness = (zcrSum / count * 60f).coerceIn(0f, 1f),
-                valence = (deltaSum / count * gain * 25f).coerceIn(0f, 1f),
-                complexity = (deltaSum / count * 30f).coerceIn(0f, 1f),
-                seed = (rmsSum.toLong() + uri.toString().hashCode())
+            val total = low + mid + high + 0.0001f
+
+            return AudioFeatures(
+                energy = (sqrt(rms / samples) * 2f).coerceIn(0f, 1f),
+                brightness = (high / total).coerceIn(0f, 1f),
+                complexity = (mid / total).coerceIn(0f, 1f),
+                valence = ln(1 + low / total).coerceIn(0f, 1f),
+                seed = seed xor uri.toString().hashCode().toLong()
             )
+
         } catch (e: Exception) {
-            defaultFeatures()
+            return fallback(uri)
+        } finally {
+            extractor.release()
         }
     }
 
-    private fun defaultFeatures() = AudioFeatures(0.5f, 0.5f, 0.5f, 0.5f, 0L)
+    private fun fallback(uri: Uri) =
+        AudioFeatures(
+            energy = 0.4f,
+            brightness = 0.4f,
+            complexity = 0.4f,
+            valence = 0.4f,
+            seed = uri.hashCode().toLong()
+        )
 }

@@ -60,7 +60,6 @@ fun AnalyzerScreen(navController: NavHostController) {
         if (!hasPermission) launcher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    // НЕЛИНЕЙНАЯ МОДЕЛЬ ЦВЕТА: Доминирующая частота выигрывает за счет 3-й степени
     val dynamicHue by remember(bassIntensity, midIntensity, highIntensity) {
         derivedStateOf {
             val b = bassIntensity.pow(3f)
@@ -70,7 +69,6 @@ fun AnalyzerScreen(navController: NavHostController) {
             
             if (total < 0.0001f) 200f 
             else {
-                // Бас (0° - Красный), Мид (120° - Зеленый), Высокие (240° - Синий)
                 ((b * 0f + m * 120f + h * 240f) / total) % 360f
             }
         }
@@ -119,11 +117,10 @@ fun AnalyzerScreen(navController: NavHostController) {
                                     totalAmplitude += amp
                                     val delta = abs(s1 - s2)
 
-                                    // Разделение с гипер-усилением для синего
                                     when {
-                                        delta < 0.015f -> b += amp * 8f   // Бас
-                                        delta < 0.10f -> m += amp * 25f  // Средние (Зеленый)
-                                        else -> h += amp * 180f         // Высокие (Синий)
+                                        delta < 0.015f -> b += amp * 8f
+                                        delta < 0.10f -> m += amp * 25f
+                                        else -> h += amp * 180f
                                     }
                                 }
                                 val n = fftSize.toFloat()
