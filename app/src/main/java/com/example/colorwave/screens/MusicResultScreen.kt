@@ -7,19 +7,19 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,9 +31,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavHostController
 import com.example.colorwave.audio.ColorMapper
 import com.example.colorwave.audio.FileAnalyzer
+import com.example.colorwave.spotify.SpotifyService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.*
@@ -44,27 +47,40 @@ fun MusicResultScreen(navController: NavHostController, fileUri: String) {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(true) }
     var palette by remember { mutableStateOf<List<Color>>(listOf(Color.DarkGray, Color.Gray)) }
+    var isFullScreen by remember { mutableStateOf(false) }
 
     val decoded = Uri.decode(fileUri)
 
     LaunchedEffect(decoded) {
         isLoading = true
         withContext(Dispatchers.Default) {
-            palette = if (decoded.startsWith("live_")) {
-                val colorsData = decoded.removePrefix("live_").split("_")
-                colorsData.mapNotNull {
-                    try { Color(it.toInt()) } catch (_: Exception) { null }
-                }.ifEmpty { listOf(Color.DarkGray, Color.Gray) }
-            } else {
-                try {
+            palette = try {
+                if (decoded.startsWith("live_")) {
+                    val parts = decoded.removePrefix("live_").split("_")
+                    parts.mapNotNull { hex ->
+                        try { Color(hex.toInt()) } catch (_: Exception) { null }
+                    }.ifEmpty { listOf(Color.Gray, Color.DarkGray) }
+                } else if (decoded.startsWith("spotify:") || decoded.length == 22) {
+                    val trackId = decoded.removePrefix("spotify:track:")
+                    val features = SpotifyService.loadFeatures(
+                        trackId = trackId,
+                        seed = decoded.hashCode().toLong()
+                    )
+                    ColorMapper.fromFeatures(features)
+                } else {
                     val features = FileAnalyzer.analyze(context, Uri.parse(decoded))
                     ColorMapper.fromFeatures(features)
-                } catch (_: Exception) {
-                    listOf(Color.DarkGray, Color.Gray)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                listOf(Color.DarkGray, Color.Gray)
             }
             isLoading = false
         }
+    }
+
+    if (isFullScreen) {
+        FullScreenGradient(palette = palette, onDismiss = { isFullScreen = false })
     }
 
     Scaffold(
@@ -105,8 +121,12 @@ fun MusicResultScreen(navController: NavHostController, fileUri: String) {
             ) {
                 Spacer(Modifier.height(16.dp))
 
+                // КАРТОЧКА С ГРАДИЕНТОМ (Теперь кликабельная и с исправленными отступами)
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(480.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(480.dp)
+                        .clickable { isFullScreen = true },
                     shape = RoundedCornerShape(32.dp),
                     elevation = CardDefaults.cardElevation(16.dp)
                 ) {
@@ -117,13 +137,15 @@ fun MusicResultScreen(navController: NavHostController, fileUri: String) {
                                 Brush.linearGradient(
                                     colors = palette,
                                     start = Offset.Zero,
-                                    end = Offset(1440f, 3000f)
+                                    end = Offset.Infinite // Растягиваем на весь размер карточки
                                 )
                             )
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Нажмите на карточку, чтобы развернуть", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Spacer(Modifier.height(20.dp))
 
                 palette.forEach { color ->
                     val hex = String.format("#%06X", 0xFFFFFF and color.toArgb())
@@ -156,6 +178,30 @@ fun MusicResultScreen(navController: NavHostController, fileUri: String) {
                     Text("Скачать PNG")
                 }
                 Spacer(Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun FullScreenGradient(palette: List<Color>, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(colors = palette, start = Offset.Zero, end = Offset.Infinite))
+        ) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(24.dp)
+                    .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(50))
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Закрыть", tint = Color.White)
             }
         }
     }
