@@ -16,6 +16,11 @@ object FileAnalyzer {
         try {
             extractor.setDataSource(context, uri, null)
 
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(context, uri)
+
+            retriever.release()
+
             val trackIndex = (0 until extractor.trackCount)
                 .firstOrNull {
                     extractor.getTrackFormat(it)
@@ -112,7 +117,7 @@ object FileAnalyzer {
                 brightness = (high / total).coerceIn(0f, 1f),
                 complexity = (mid / total).coerceIn(0f, 1f),
                 valence = ln(1 + low / total).coerceIn(0f, 1f),
-                seed = seed xor uri.toString().hashCode().toLong()
+                seed = seed xor uri.toString().hashCode().toLong(),
             )
 
         } catch (e: Exception) {
@@ -128,6 +133,6 @@ object FileAnalyzer {
             brightness = 0.4f,
             complexity = 0.4f,
             valence = 0.4f,
-            seed = uri.hashCode().toLong()
+            seed = uri.hashCode().toLong(),
         )
 }

@@ -14,27 +14,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
+import com.example.colorwave.MainViewModel
 
 @Composable
-fun LoginScreen(navController: NavHostController) {
+fun LoginScreen(navController: NavHostController, viewModel: MainViewModel) {
     val context = LocalContext.current
     var login by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = "ColorWave",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
+        Text("ColorWave", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(40.dp))
 
         OutlinedTextField(
@@ -44,11 +38,7 @@ fun LoginScreen(navController: NavHostController) {
             modifier = Modifier.fillMaxWidth(),
             isError = isError,
             singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            )
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, keyboardType = KeyboardType.Email, imeAction = ImeAction.Next)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -61,19 +51,11 @@ fun LoginScreen(navController: NavHostController) {
             visualTransformation = PasswordVisualTransformation(),
             isError = isError,
             singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
-            )
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
         )
 
         if (isError) {
-            Text(
-                text = "Пожалуйста, заполните все поля",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            Text("Пожалуйста, заполните все поля", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -82,7 +64,9 @@ fun LoginScreen(navController: NavHostController) {
             onClick = {
                 if (login.isNotBlank() && password.isNotBlank()) {
                     val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putBoolean("is_logged_in", true).apply()
+                    prefs.edit().putString("user_login", login).apply()
+
+                    viewModel.login(login)
 
                     navController.navigate("main_app") {
                         popUpTo("login") { inclusive = true }

@@ -42,7 +42,7 @@ object SpotifyService {
             brightness = f.danceability ?: 0.5f,
             complexity = 1f - (f.acousticness ?: 0.5f),
             valence = f.valence ?: 0.5f,
-            seed = seed
+            seed = seed,
         )
     }
 }

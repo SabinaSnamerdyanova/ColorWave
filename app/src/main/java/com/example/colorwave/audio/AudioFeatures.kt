@@ -5,5 +5,5 @@ data class AudioFeatures(
     val brightness: Float,
     val complexity: Float,
     val valence: Float,
-    val seed: Long
+    val seed: Long,
 )
