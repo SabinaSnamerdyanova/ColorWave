@@ -38,12 +38,11 @@ import kotlin.math.pow
 @Composable
 fun AnalyzerScreen(navController: NavHostController) {
     val context = LocalContext.current
-    
+
     var bassIntensity by remember { mutableStateOf(0f) }
     var midIntensity by remember { mutableStateOf(0f) }
     var highIntensity by remember { mutableStateOf(0f) }
     var globalVolume by remember { mutableStateOf(0f) }
-    
     val sessionColors = remember { mutableStateListOf<Int>() }
 
     var hasPermission by remember {
@@ -66,8 +65,8 @@ fun AnalyzerScreen(navController: NavHostController) {
             val m = midIntensity.pow(3f)
             val h = highIntensity.pow(3f)
             val total = b + m + h
-            
-            if (total < 0.0001f) 200f 
+
+            if (total < 0.0001f) 200f
             else {
                 ((b * 0f + m * 120f + h * 240f) / total) % 360f
             }
@@ -103,7 +102,7 @@ fun AnalyzerScreen(navController: NavHostController) {
                 withContext(Dispatchers.IO) {
                     val buffer = ShortArray(fftSize)
                     audioRecord.startRecording()
-                    val smoothing = 0.3f 
+                    val smoothing = 0.3f
 
                     try {
                         while (isActive) {
@@ -128,7 +127,7 @@ fun AnalyzerScreen(navController: NavHostController) {
                                 bassIntensity = bassIntensity * (1 - smoothing) + (b / n).coerceIn(0f, 1f) * smoothing
                                 midIntensity = midIntensity * (1 - smoothing) + (m / n).coerceIn(0f, 1f) * smoothing
                                 highIntensity = highIntensity * (1 - smoothing) + (h / n).coerceIn(0f, 1f) * smoothing
-                                
+
                                 if (System.currentTimeMillis() % 400 < 20 && globalVolume > 0.05f) {
                                     sessionColors.add(colorTop.toArgb())
                                 }

@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -23,8 +25,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            ColorWaveTheme {
-                AppNavigation()
+            ColorWaveTheme(dynamicColor = false) {
+                androidx.compose.material3.Surface(
+                    modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AppNavigation()
+                }
             }
         }
     }
@@ -32,24 +39,26 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigation() {
-    val context = LocalContext.current
-    val viewModel: MainViewModel = viewModel()
-    val prefs = remember { context.getSharedPreferences("prefs", Context.MODE_PRIVATE) }
-
-    val savedLogin = remember { prefs.getString("user_login", null) }
-    if (savedLogin != null && viewModel.currentUser == null) {
-        viewModel.login(savedLogin)
-    }
-
     val navController = rememberNavController()
-    val startDest = if (savedLogin != null) "main_app" else "login"
-
-    NavHost(navController = navController, startDestination = startDest) {
+    val viewModel: MainViewModel = viewModel()
+    val startDestination =
+        if (viewModel.currentUser != null) "main_app"
+        else "login"
+    NavHost(
+        navController = navController,
+        startDestination = startDestination
+    ) {
         composable("login") {
-            LoginScreen(navController = navController, viewModel = viewModel)
+            LoginScreen(
+                navController = navController,
+                viewModel = viewModel
+            )
         }
         composable("main_app") {
-            MainScreen(rootNavController = navController, mainViewModel = viewModel)
+            MainScreen(
+                rootNavController = navController,
+                mainViewModel = viewModel
+            )
         }
     }
 }

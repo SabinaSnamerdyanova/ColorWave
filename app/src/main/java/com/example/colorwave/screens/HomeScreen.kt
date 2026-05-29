@@ -37,7 +37,7 @@ fun HomeScreenContent(navController: NavHostController) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("ColorWave", style = MaterialTheme.typography.displayMedium)
-            
+
             Spacer(modifier = Modifier.height(40.dp))
 
             Button(

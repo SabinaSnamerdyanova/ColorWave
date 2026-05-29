@@ -17,68 +17,124 @@ import androidx.navigation.NavHostController
 import com.example.colorwave.MainViewModel
 
 @Composable
-fun LoginScreen(navController: NavHostController, viewModel: MainViewModel) {
-    val context = LocalContext.current
-    var login by remember { mutableStateOf("") }
+fun LoginScreen(
+    navController: NavHostController,
+    viewModel: MainViewModel
+) {
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isError by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("ColorWave", style = MaterialTheme.typography.displayMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(40.dp))
 
-        OutlinedTextField(
-            value = login,
-            onValueChange = { login = it; isError = false },
-            label = { Text("Логин") },
-            modifier = Modifier.fillMaxWidth(),
-            isError = isError,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, keyboardType = KeyboardType.Email, imeAction = ImeAction.Next)
+        Text(
+            "ColorWave",
+            style = MaterialTheme.typography.displayMedium,
+            color = MaterialTheme.colorScheme.primary
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(40.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it; error = null },
+            label = { Text("Email") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            )
+        )
+
+        Spacer(Modifier.height(16.dp))
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it; isError = false },
+            onValueChange = { password = it; error = null },
             label = { Text("Пароль") },
             modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(),
-            isError = isError,
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done)
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            )
         )
 
-        if (isError) {
-            Text("Пожалуйста, заполните все поля", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = MaterialTheme.colorScheme.error)
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(Modifier.height(32.dp))
 
         Button(
-            onClick = {
-                if (login.isNotBlank() && password.isNotBlank()) {
-                    val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putString("user_login", login).apply()
-
-                    viewModel.login(login)
-
-                    navController.navigate("main_app") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                } else {
-                    isError = true
-                }
-            },
+            enabled = !loading,
             modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large
+            onClick = {
+                if (email.isBlank() || password.isBlank()) {
+                    error = "Заполните все поля"
+                    return@Button
+                }
+
+                loading = true
+
+                viewModel.login(
+                    email = email,
+                    password = password,
+                    onSuccess = {
+                        loading = false
+                        navController.navigate("main_app") {
+                            popUpTo("login") { inclusive = true }
+                        }
+                    },
+                    onError = {
+                        loading = false
+                        error = it
+                    }
+                )
+            }
         ) {
-            Text("Войти", modifier = Modifier.padding(8.dp))
+            Text(if (loading) "Вход..." else "Войти")
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        TextButton(
+            enabled = !loading,
+            onClick = {
+                if (email.isBlank() || password.isBlank()) {
+                    error = "Заполните все поля для регистрации"
+                    return@TextButton
+                }
+
+                loading = true
+
+                viewModel.register(
+                    email = email,
+                    password = password,
+                    onSuccess = {
+                        loading = false
+                        navController.navigate("main_app") {
+                            popUpTo("login") { inclusive = true }
+                        }
+                    },
+                    onError = { errorMessage ->
+                        loading = false
+                        error = errorMessage
+                    }
+                )
+            }
+        ) {
+            Text(if (loading) "Регистрация..." else "Зарегистрироваться")
         }
     }
 }

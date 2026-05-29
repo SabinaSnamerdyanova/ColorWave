@@ -191,7 +191,6 @@ fun MusicResultScreen(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Icon(Icons.Default.Share, contentDescription = null)
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "Сохранить в коллекцию",
@@ -203,7 +202,6 @@ fun MusicResultScreen(
     }
 
     if (showFullScreen) {
-
         Dialog(onDismissRequest = { showFullScreen = false }) {
 
             Box(

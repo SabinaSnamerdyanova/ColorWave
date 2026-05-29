@@ -22,15 +22,15 @@ fun AppNavHost(
         modifier = androidx.compose.ui.Modifier.padding(innerPadding)
     ) {
         composable("home") { HomeScreenContent(navController) }
-        
-        composable("collection") { 
-            CollectionScreen(viewModel = mainViewModel) 
+
+        composable("collection") {
+            CollectionScreen(viewModel = mainViewModel)
         }
-        
+
         composable("settings") {
             SettingsScreenContent(rootNavController = rootNavController)
         }
-        
+
         composable("analyzer") { AnalyzerScreen(navController) }
 
         composable(
